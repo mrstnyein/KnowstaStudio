@@ -1,0 +1,929 @@
+<!DOCTYPE html>
+<html lang="en" class="">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Knowsta Studio - Professional Strategy & Calendar</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.0/dist/chart.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+          darkMode: 'class',
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+        .calendar-grid {
+            grid-template-columns: repeat(7, minmax(0, 1fr));
+        }
+        .day-cell {
+            min-height: 120px;
+            transition: background-color 0.2s ease-in-out;
+        }
+        .status-idea { border-left-color: #a78bfa; background-color: #f5f3ff; }
+        .status-drafting { border-left-color: #f97316; background-color: #fff7ed; }
+        .status-scheduled { border-left-color: #3b82f6; background-color: #eff6ff; }
+        .status-published { border-left-color: #22c55e; background-color: #f0fdf4; }
+        .status-reviewing { border-left-color: #6b7280; background-color: #f8fafc; }
+
+        .dark .status-idea { background-color: rgba(167, 139, 250, 0.1); }
+        .dark .status-drafting { background-color: rgba(249, 115, 22, 0.1); }
+        .dark .status-scheduled { background-color: rgba(59, 130, 246, 0.1); }
+        .dark .status-published { background-color: rgba(34, 197, 94, 0.1); }
+        .dark .status-reviewing { background-color: rgba(107, 114, 128, 0.1); }
+
+        /* Custom scrollbar */
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .dark .custom-scrollbar::-webkit-scrollbar-track { background: #1e293b; }
+        .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #475569; }
+        .dark .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #64748b; }
+        
+        /* Drag and Drop styles */
+        .drag-over { background-color: #dbeafe; border: 2px dashed #93c5fd; }
+        .dark .drag-over { background-color: #1e293b; border-color: #3b82f6; }
+        .post-item.dragging, .pipeline-card.dragging { opacity: 0.5; transform: scale(0.95); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }
+        
+        /* Toast Notification */
+        @keyframes fadeInOut {
+            0%, 100% { opacity: 0; transform: translateY(20px); }
+            10%, 90% { opacity: 1; transform: translateY(0); }
+        }
+        .toast { animation: fadeInOut 3s ease-in-out forwards; }
+        
+        .pipeline-column { min-width: 300px; }
+
+        .assignee-avatar {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: 600;
+            color: white;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-200 transition-colors">
+
+    <!-- App Container -->
+    <div id="app" class="min-h-screen p-4 sm:p-6 lg:p-8">
+        <div class="max-w-7xl mx-auto">
+            
+            <!-- Header -->
+            <header class="flex flex-col sm:flex-row justify-between sm:items-center mb-8 pb-4 border-b border-slate-200 dark:border-slate-700">
+                <div class="flex items-center space-x-3">
+                    <div class="bg-blue-600 p-2 rounded-lg">
+                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                    </div>
+                    <div>
+                        <h1 class="text-3xl font-bold text-slate-900 dark:text-white">Knowsta Studio</h1>
+                        <p class="text-slate-500 dark:text-slate-400 mt-1">Your Social Media Command Center</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-2 mt-4 sm:mt-0">
+                    <button id="dark-mode-toggle" class="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                         <svg id="theme-icon-light" class="w-6 h-6 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+                        <svg id="theme-icon-dark" class="w-6 h-6 text-slate-400 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
+                    </button>
+                    <button id="export-csv-btn" class="flex items-center space-x-2 w-full sm:w-auto mb-2 sm:mb-0 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 font-semibold py-2 px-4 rounded-lg shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors">
+                        <svg class="w-5 h-5 text-slate-500 dark:text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                        <span>Export CSV</span>
+                    </button>
+                    <button id="add-post-btn-header" class="flex items-center space-x-2 w-full sm:w-auto bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-transform transform hover:scale-105">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+                        <span>Add New Post</span>
+                    </button>
+                </div>
+            </header>
+
+            <!-- Main Content -->
+            <main>
+                <!-- Idea Generator Section -->
+                <div class="mb-8 bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+                     <h3 class="text-xl font-bold text-slate-900 dark:text-white mb-4">Need an Idea?</h3>
+                     <div class="flex flex-col md:flex-row md:items-center md:justify-between bg-slate-50 dark:bg-slate-900/50 p-4 rounded-lg border border-slate-200 dark:border-slate-700">
+                        <p id="idea-text" class="text-slate-600 dark:text-slate-400 md:flex-grow mb-4 md:mb-0 md:mr-4">Click the button to generate a new content idea!</p>
+                        <button id="generate-idea-btn" class="w-full md:w-auto bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-transform transform hover:scale-105">Generate Idea</button>
+                     </div>
+                </div>
+                
+                <!-- View Controls & Filters -->
+                <div class="mb-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div class="flex items-center p-1 rounded-lg bg-slate-100 dark:bg-slate-800">
+                        <button id="view-calendar-btn" class="px-3 py-1 text-sm font-semibold rounded-md">Calendar</button>
+                        <button id="view-list-btn" class="px-3 py-1 text-sm font-semibold rounded-md">List</button>
+                        <button id="view-pipeline-btn" class="px-3 py-1 text-sm font-semibold rounded-md">Pipeline</button>
+                    </div>
+                    <div class="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto flex-wrap">
+                        <input type="text" id="search-input" placeholder="Search posts..." class="w-full sm:w-auto px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        <select id="assignee-filter" class="w-full sm:w-auto px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            <option value="all">All Assignees</option>
+                        </select>
+                        <select id="campaign-filter" class="w-full sm:w-auto px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            <option value="all">All Campaigns</option>
+                        </select>
+                        <select id="status-filter" class="w-full sm:w-auto px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            <option value="all">All Statuses</option>
+                            <option value="idea">Idea</option>
+                            <option value="drafting">Drafting</option>
+                            <option value="scheduled">Scheduled</option>
+                            <option value="published">Published</option>
+                            <option value="reviewing">Reviewing</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Calendar Section -->
+                <div id="calendar-view" class="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+                    <div class="flex flex-col sm:flex-row items-center justify-between mb-6">
+                        <div class="flex items-center space-x-2">
+                             <button id="prev-month" class="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+                                <svg class="w-6 h-6 text-slate-600 dark:text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+                            </button>
+                            <h2 id="current-month-year" class="text-xl font-semibold text-slate-700 dark:text-slate-300 text-center w-48"></h2>
+                            <button id="next-month" class="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+                                <svg class="w-6 h-6 text-slate-600 dark:text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                            </button>
+                        </div>
+                        <button id="today-btn" class="mt-4 sm:mt-0 w-full sm:w-auto bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 font-semibold py-2 px-4 rounded-lg shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors">Today</button>
+                    </div>
+                    <div class="grid calendar-grid border-t border-l border-slate-200 dark:border-slate-700">
+                        <div class="text-center font-semibold py-2 border-r border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 text-xs sm:text-sm text-slate-600 dark:text-slate-400">Sun</div>
+                        <div class="text-center font-semibold py-2 border-r border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 text-xs sm:text-sm text-slate-600 dark:text-slate-400">Mon</div>
+                        <div class="text-center font-semibold py-2 border-r border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 text-xs sm:text-sm text-slate-600 dark:text-slate-400">Tue</div>
+                        <div class="text-center font-semibold py-2 border-r border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 text-xs sm:text-sm text-slate-600 dark:text-slate-400">Wed</div>
+                        <div class="text-center font-semibold py-2 border-r border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 text-xs sm:text-sm text-slate-600 dark:text-slate-400">Thu</div>
+                        <div class="text-center font-semibold py-2 border-r border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 text-xs sm:text-sm text-slate-600 dark:text-slate-400">Fri</div>
+                        <div class="text-center font-semibold py-2 border-r border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 text-xs sm:text-sm text-slate-600 dark:text-slate-400">Sat</div>
+                        <div id="calendar-body" class="grid calendar-grid col-span-7"></div>
+                    </div>
+                </div>
+
+                <!-- List View Section -->
+                <div id="list-view" class="hidden bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+                    <div id="list-body" class="max-h-[80vh] overflow-y-auto custom-scrollbar"></div>
+                </div>
+                
+                <!-- Pipeline View Section -->
+                <div id="pipeline-view" class="hidden">
+                    <div id="pipeline-body" class="flex space-x-6 overflow-x-auto pb-4 custom-scrollbar"></div>
+                </div>
+
+                <!-- Analytics Section -->
+                <div class="mt-8 bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+                    <h3 class="text-xl font-bold text-slate-900 dark:text-white mb-4">Content Analytics</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <div class="lg:col-span-1 p-4 rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center text-center">
+                            <p class="text-slate-500 dark:text-slate-400 text-sm font-medium">Total Posts This Month</p>
+                            <p id="total-posts" class="text-4xl font-bold text-blue-600">0</p>
+                        </div>
+                        <div class="p-4 rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700">
+                             <h4 class="text-center font-semibold text-slate-600 dark:text-slate-300 mb-2">Posts by Platform</h4>
+                            <canvas id="platform-chart"></canvas>
+                        </div>
+                        <div class="p-4 rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700">
+                            <h4 class="text-center font-semibold text-slate-600 dark:text-slate-300 mb-2">Posts by Status</h4>
+                            <canvas id="status-chart"></canvas>
+                        </div>
+                        <div class="md:col-span-2 lg:col-span-3 p-4 rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700">
+                            <h4 class="text-center font-semibold text-slate-600 dark:text-slate-300 mb-2">Campaign Performance (This Month)</h4>
+                            <canvas id="campaign-chart"></canvas>
+                        </div>
+                        <div class="md:col-span-2 lg:col-span-3 p-4 rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700">
+                            <h4 class="text-center font-semibold text-slate-600 dark:text-slate-300 mb-2">Performance by Objective (This Month)</h4>
+                            <canvas id="objective-chart"></canvas>
+                        </div>
+                        <div class="md:col-span-2 lg:col-span-3 p-4 rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700">
+                            <h4 class="text-center font-semibold text-slate-600 dark:text-slate-300 mb-4">Top Performing Content (This Month)</h4>
+                            <div id="top-performing-content" class="space-y-3">
+                                <!-- Top content will be injected here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Add/Edit Post Modal -->
+    <div id="post-modal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 hidden z-50 overflow-y-auto">
+        <div class="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-lg transform transition-all scale-95 opacity-0" id="modal-content">
+            <form id="post-form" class="p-8">
+                <div class="flex justify-between items-start mb-6">
+                    <h3 id="modal-title" class="text-2xl font-bold text-slate-900 dark:text-white">Add New Post</h3>
+                    <button type="button" id="close-modal" class="p-1 rounded-full text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-slate-600 dark:hover:text-slate-300">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </div>
+                
+                <input type="hidden" id="post-id">
+                
+                <div class="space-y-4 max-h-[65vh] overflow-y-auto pr-3 custom-scrollbar">
+                     <div>
+                        <label for="post-title" class="block text-sm font-medium text-slate-700 dark:text-slate-300">Title</label>
+                        <input type="text" id="post-title" class="mt-1 block w-full rounded-md border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 shadow-sm focus:border-blue-500 focus:ring-blue-500" placeholder="Catchy title for your post" required>
+                    </div>
+                    <div>
+                        <label for="post-description" class="block text-sm font-medium text-slate-700 dark:text-slate-300">Description</label>
+                        <textarea id="post-description" rows="3" class="mt-1 block w-full rounded-md border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 shadow-sm focus:border-blue-500 focus:ring-blue-500" placeholder="What's on your mind?"></textarea>
+                    </div>
+                    <div>
+                        <label for="post-hashtags" class="block text-sm font-medium text-slate-700 dark:text-slate-300">Hashtags</label>
+                        <input type="text" id="post-hashtags" class="mt-1 block w-full rounded-md border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 shadow-sm focus:border-blue-500 focus:ring-blue-500" placeholder="#socialmedia #content #awesome">
+                    </div>
+                    <div>
+                        <label for="post-image-url" class="block text-sm font-medium text-slate-700 dark:text-slate-300">Image URL</label>
+                        <input type="url" id="post-image-url" class="mt-1 block w-full rounded-md border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 shadow-sm focus:border-blue-500 focus:ring-blue-500" placeholder="https://example.com/image.png">
+                        <img id="image-preview" src="" alt="Image Preview" class="mt-2 rounded-lg max-h-40 w-auto hidden"/>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label for="post-date" class="block text-sm font-medium text-slate-700 dark:text-slate-300">Date</label>
+                            <input type="date" id="post-date" class="mt-1 block w-full rounded-md border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 shadow-sm focus:border-blue-500 focus:ring-blue-500" required>
+                        </div>
+                        <div>
+                             <label for="post-assignee" class="block text-sm font-medium text-slate-700 dark:text-slate-300">Assignee</label>
+                             <input type="text" id="post-assignee" list="assignees-list" class="mt-1 block w-full rounded-md border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 shadow-sm focus:border-blue-500 focus:ring-blue-500" placeholder="e.g., Jane Doe">
+                             <datalist id="assignees-list"></datalist>
+                        </div>
+                    </div>
+                    <div>
+                        <label for="post-platform" class="block text-sm font-medium text-slate-700 dark:text-slate-300">Platform</label>
+                        <select id="post-platform" class="mt-1 block w-full rounded-md border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                            <option>Instagram</option> <option>Twitter</option> <option>Facebook</option> <option>LinkedIn</option> <option>TikTok</option> <option>Blog</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="post-status" class="block text-sm font-medium text-slate-700 dark:text-slate-300">Status</label>
+                        <select id="post-status" class="mt-1 block w-full rounded-md border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                           <option value="idea">Idea</option>
+                           <option value="drafting">Drafting</option>
+                           <option value="scheduled">Scheduled</option>
+                           <option value="published">Published</option>
+                           <option value="reviewing">Reviewing</option>
+                        </select>
+                    </div>
+
+                    <!-- Content Checklist Section -->
+                    <div class="pt-4 mt-4 border-t border-slate-200 dark:border-slate-700">
+                        <h4 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Content Checklist</h4>
+                        <div id="content-checklist" class="space-y-2">
+                             <!-- Checklist items will be injected here -->
+                        </div>
+                    </div>
+
+                    <!-- Campaign, Budget & Objective Section -->
+                    <div class="pt-4 mt-4 border-t border-slate-200 dark:border-slate-700">
+                         <h4 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Strategy</h4>
+                         <div>
+                            <label for="post-objective" class="block text-sm font-medium text-slate-700 dark:text-slate-300">Objective</label>
+                            <select id="post-objective" class="mt-1 block w-full rounded-md border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                <option>Brand Awareness</option>
+                                <option>Engagement</option>
+                                <option>Lead Generation</option>
+                                <option>Sales</option>
+                                <option>Traffic</option>
+                            </select>
+                        </div>
+                         <div class="mt-4">
+                            <label for="post-campaign" class="block text-sm font-medium text-slate-700 dark:text-slate-300">Campaign</label>
+                            <input type="text" list="campaigns-list" id="post-campaign" class="mt-1 block w-full rounded-md border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 shadow-sm focus:border-blue-500 focus:ring-blue-500" placeholder="e.g., Q4 Holiday Sale">
+                            <datalist id="campaigns-list"></datalist>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4 mt-4">
+                            <div>
+                                <label for="post-budget" class="block text-sm font-medium text-slate-700 dark:text-slate-300">Budget ($)</label>
+                                <input type="number" id="post-budget" class="mt-1 block w-full rounded-md border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 shadow-sm focus:border-blue-500 focus:ring-blue-500" placeholder="0.00" step="0.01">
+                            </div>
+                            <div>
+                                <label for="post-spend" class="block text-sm font-medium text-slate-700 dark:text-slate-300">Actual Spend ($)</label>
+                                <input type="number" id="post-spend" class="mt-1 block w-full rounded-md border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 shadow-sm focus:border-blue-500 focus:ring-blue-500" placeholder="0.00" step="0.01">
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Performance Metrics Section -->
+                    <div id="performance-metrics-section" class="hidden pt-4 mt-4 border-t border-slate-200 dark:border-slate-700">
+                        <h4 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">Performance Metrics</h4>
+                        <div class="grid grid-cols-3 gap-4">
+                            <div>
+                                <label for="post-likes" class="block text-sm font-medium text-slate-700 dark:text-slate-300">Likes</label>
+                                <input type="number" id="post-likes" class="mt-1 block w-full rounded-md border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 shadow-sm focus:border-blue-500 focus:ring-blue-500" placeholder="0">
+                            </div>
+                            <div>
+                                <label for="post-comments" class="block text-sm font-medium text-slate-700 dark:text-slate-300">Comments</label>
+                                <input type="number" id="post-comments" class="mt-1 block w-full rounded-md border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 shadow-sm focus:border-blue-500 focus:ring-blue-500" placeholder="0">
+                            </div>
+                             <div>
+                                <label for="post-shares" class="block text-sm font-medium text-slate-700 dark:text-slate-300">Shares</label>
+                                <input type="number" id="post-shares" class="mt-1 block w-full rounded-md border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 shadow-sm focus:border-blue-500 focus:ring-blue-500" placeholder="0">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-8 flex justify-between items-center">
+                    <div>
+                        <button type="button" id="delete-post-btn" class="text-red-600 font-semibold hover:text-red-800 transition-colors hidden px-3 py-2">Delete</button>
+                        <button type="button" id="duplicate-post-btn" class="text-blue-600 font-semibold hover:text-blue-800 transition-colors hidden px-3 py-2">Duplicate</button>
+                    </div>
+                    <button type="submit" id="save-post-btn" class="bg-blue-600 text-white font-semibold py-2 px-6 rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-75">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-5 right-5 bg-slate-900 text-white py-3 px-5 rounded-lg shadow-xl opacity-0 hidden dark:bg-white dark:text-slate-900">
+        <p id="toast-message"></p>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- STATE MANAGEMENT ---
+            let currentDate = new Date();
+            let posts = JSON.parse(localStorage.getItem('knowstaStudioPosts')) || [];
+            let platformChart, statusChart, campaignChart, objectiveChart;
+            let toastTimeout;
+            let currentView = 'calendar';
+            let searchTerm = '';
+            let statusFilter = 'all';
+            let campaignFilter = 'all';
+            let assigneeFilter = 'all';
+            const pipelineStatuses = ['idea', 'drafting', 'scheduled', 'published', 'reviewing'];
+            const checklistItems = {
+                proofread: 'Proofread & Edited',
+                imageOptimized: 'Image Optimized',
+                ctaIncluded: 'Call to Action Included',
+                hashtagsResearched: 'Hashtags Researched'
+            };
+            
+            // --- DOM SELECTORS ---
+            const calendarBody = document.getElementById('calendar-body');
+            const listBody = document.getElementById('list-body');
+            const pipelineBody = document.getElementById('pipeline-body');
+            const calendarView = document.getElementById('calendar-view');
+            const listView = document.getElementById('list-view');
+            const pipelineView = document.getElementById('pipeline-view');
+            const currentMonthYear = document.getElementById('current-month-year');
+            const prevMonthBtn = document.getElementById('prev-month');
+            const nextMonthBtn = document.getElementById('next-month');
+            const todayBtn = document.getElementById('today-btn');
+            const modal = document.getElementById('post-modal');
+            const modalContent = document.getElementById('modal-content');
+            const closeModalBtn = document.getElementById('close-modal');
+            const addPostBtnHeader = document.getElementById('add-post-btn-header');
+            const postForm = document.getElementById('post-form');
+            const deletePostBtn = document.getElementById('delete-post-btn');
+            const duplicatePostBtn = document.getElementById('duplicate-post-btn');
+            const modalTitle = document.getElementById('modal-title');
+            const exportCsvBtn = document.getElementById('export-csv-btn');
+            const generateIdeaBtn = document.getElementById('generate-idea-btn');
+            const ideaText = document.getElementById('idea-text');
+            const toast = document.getElementById('toast');
+            const toastMessage = document.getElementById('toast-message');
+            const darkModeToggle = document.getElementById('dark-mode-toggle');
+            const themeIconLight = document.getElementById('theme-icon-light');
+            const themeIconDark = document.getElementById('theme-icon-dark');
+            const viewCalendarBtn = document.getElementById('view-calendar-btn');
+            const viewListBtn = document.getElementById('view-list-btn');
+            const viewPipelineBtn = document.getElementById('view-pipeline-btn');
+            const searchInput = document.getElementById('search-input');
+            const statusFilterSelect = document.getElementById('status-filter');
+            const campaignFilterSelect = document.getElementById('campaign-filter');
+            const assigneeFilterSelect = document.getElementById('assignee-filter');
+            const campaignDataList = document.getElementById('campaigns-list');
+            const assigneeDataList = document.getElementById('assignees-list');
+            const imageUrlInput = document.getElementById('post-image-url');
+            const imagePreview = document.getElementById('image-preview');
+            const performanceMetricsSection = document.getElementById('performance-metrics-section');
+            const postStatusSelect = document.getElementById('post-status');
+            const checklistContainer = document.getElementById('content-checklist');
+            const topPerformingContentContainer = document.getElementById('top-performing-content');
+            
+            // --- DATA HELPERS ---
+            const savePosts = () => localStorage.setItem('knowstaStudioPosts', JSON.stringify(posts));
+
+            const getFilteredPosts = () => {
+                return posts
+                    .filter(post => {
+                        const searchMatch = post.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                                         (post.description || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                         (post.hashtags || '').toLowerCase().includes(searchTerm.toLowerCase());
+                        const statusMatch = statusFilter === 'all' || post.status === statusFilter;
+                        const campaignMatch = campaignFilter === 'all' || (post.campaign || 'Uncategorized') === campaignFilter;
+                        const assigneeMatch = assigneeFilter === 'all' || (post.assignee || 'Unassigned') === assigneeFilter;
+                        return searchMatch && statusMatch && campaignMatch && assigneeMatch;
+                    })
+                    .sort((a, b) => new Date(a.date) - new Date(b.date));
+            };
+
+            // --- THEME & VIEW ---
+            const applyTheme = (theme) => {
+                if (theme === 'dark') {
+                    document.documentElement.classList.add('dark');
+                    themeIconLight.classList.add('hidden');
+                    themeIconDark.classList.remove('hidden');
+                } else {
+                    document.documentElement.classList.remove('dark');
+                    themeIconLight.classList.remove('hidden');
+                    themeIconDark.classList.add('hidden');
+                }
+                localStorage.setItem('theme', theme);
+                renderAnalytics(); // Re-render charts for theme change
+            };
+
+            const switchView = (view) => {
+                currentView = view;
+                const views = { calendar: calendarView, list: listView, pipeline: pipelineView };
+                const buttons = { calendar: viewCalendarBtn, list: viewListBtn, pipeline: viewPipelineBtn };
+                
+                Object.keys(views).forEach(v => {
+                    views[v].classList.toggle('hidden', v !== view);
+                    buttons[v].classList.toggle('bg-white', v === view);
+                    buttons[v].classList.toggle('dark:bg-slate-700', v === view);
+                    buttons[v].classList.toggle('text-blue-600', v === view);
+                });
+                render();
+            };
+
+            // --- UI HELPERS ---
+            const showToast = (message) => {
+                toastMessage.textContent = message;
+                toast.classList.remove('hidden');
+                toast.classList.add('toast');
+                clearTimeout(toastTimeout);
+                toastTimeout = setTimeout(() => {
+                    toast.classList.add('hidden');
+                    toast.classList.remove('toast');
+                }, 3000);
+            };
+            
+            const handleImagePreview = () => {
+                const url = imageUrlInput.value;
+                if (url) {
+                    imagePreview.src = url;
+                    imagePreview.classList.remove('hidden');
+                    imagePreview.onerror = () => { imagePreview.classList.add('hidden'); };
+                } else {
+                    imagePreview.classList.add('hidden');
+                }
+            };
+
+            const togglePerformanceMetrics = () => {
+                performanceMetricsSection.classList.toggle('hidden', postStatusSelect.value !== 'published');
+            };
+
+            const updateDynamicFilters = () => {
+                const campaigns = [...new Set(posts.map(p => p.campaign).filter(Boolean))];
+                campaignFilterSelect.innerHTML = '<option value="all">All Campaigns</option>';
+                campaignDataList.innerHTML = '';
+                campaigns.forEach(c => {
+                    campaignFilterSelect.innerHTML += `<option value="${c}">${c}</option>`;
+                    campaignDataList.innerHTML += `<option value="${c}">`;
+                });
+                campaignFilterSelect.value = campaignFilter;
+                
+                const assignees = [...new Set(posts.map(p => p.assignee).filter(Boolean))];
+                assigneeFilterSelect.innerHTML = '<option value="all">All Assignees</option>';
+                assigneeDataList.innerHTML = '';
+                assignees.forEach(a => {
+                    assigneeFilterSelect.innerHTML += `<option value="${a}">${a}</option>`;
+                    assigneeDataList.innerHTML += `<option value="${a}">`;
+                });
+                assigneeFilterSelect.value = assigneeFilter;
+            };
+
+            const openModal = (date, post = null) => {
+                postForm.reset();
+                // Populate checklist
+                checklistContainer.innerHTML = Object.keys(checklistItems).map(key => `
+                    <div class="flex items-center">
+                        <input id="checklist-${key}" data-key="${key}" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                        <label for="checklist-${key}" class="ml-2 block text-sm text-gray-900 dark:text-gray-300">${checklistItems[key]}</label>
+                    </div>
+                `).join('');
+
+                if (post) {
+                    modalTitle.textContent = 'Edit Post';
+                    document.getElementById('post-id').value = post.id;
+                    document.getElementById('post-title').value = post.title;
+                    document.getElementById('post-description').value = post.description || '';
+                    document.getElementById('post-hashtags').value = post.hashtags || '';
+                    imageUrlInput.value = post.imageUrl || '';
+                    document.getElementById('post-date').value = post.date;
+                    document.getElementById('post-platform').value = post.platform;
+                    postStatusSelect.value = post.status;
+                    document.getElementById('post-assignee').value = post.assignee || '';
+                    document.getElementById('post-objective').value = post.objective || 'Brand Awareness';
+                    document.getElementById('post-campaign').value = post.campaign || '';
+                    document.getElementById('post-budget').value = post.budget || '';
+                    document.getElementById('post-spend').value = post.spend || '';
+                    document.getElementById('post-likes').value = post.likes || '';
+                    document.getElementById('post-comments').value = post.comments || '';
+                    document.getElementById('post-shares').value = post.shares || '';
+                    deletePostBtn.classList.remove('hidden');
+                    duplicatePostBtn.classList.remove('hidden');
+                    if (post.checklist) {
+                        Object.keys(post.checklist).forEach(key => {
+                            const checkbox = document.getElementById(`checklist-${key}`);
+                            if (checkbox) checkbox.checked = post.checklist[key];
+                        });
+                    }
+                } else {
+                    modalTitle.textContent = 'Add New Post';
+                    document.getElementById('post-id').value = '';
+                    document.getElementById('post-date').value = date;
+                    postStatusSelect.value = 'idea';
+                    deletePostBtn.classList.add('hidden');
+                    duplicatePostBtn.classList.add('hidden');
+                }
+                handleImagePreview();
+                togglePerformanceMetrics();
+                modal.classList.remove('hidden');
+                setTimeout(() => { modalContent.classList.remove('scale-95', 'opacity-0'); }, 10);
+            };
+
+            const closeModal = () => {
+                 modalContent.classList.add('scale-95', 'opacity-0');
+                 setTimeout(() => modal.classList.add('hidden'), 200);
+            };
+
+            // --- MASTER RENDER FUNCTION ---
+            const render = () => {
+                if (currentView === 'calendar') renderCalendar();
+                else if (currentView === 'list') renderListView();
+                else if (currentView === 'pipeline') renderPipelineView();
+                
+                renderAnalytics();
+                updateDynamicFilters();
+            };
+            
+            // --- CARD HELPERS ---
+            const stringToColor = (str) => {
+                let hash = 0;
+                for (let i = 0; i < str.length; i++) {
+                    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+                }
+                let color = '#';
+                for (let i = 0; i < 3; i++) {
+                    let value = (hash >> (i * 8)) & 0xFF;
+                    color += ('00' + value.toString(16)).substr(-2);
+                }
+                return color;
+            };
+
+            const getAvatarHTML = (assignee) => {
+                if (!assignee) return '';
+                return `<div class="assignee-avatar" style="background-color: ${stringToColor(assignee)}">${assignee.charAt(0).toUpperCase()}</div>`;
+            };
+            
+            const getChecklistProgressHTML = (checklist) => {
+                if (!checklist) return '';
+                const total = Object.keys(checklistItems).length;
+                const completed = Object.values(checklist).filter(Boolean).length;
+                if (completed === 0) return '';
+                return `<div class="text-xs text-slate-500 mt-1">${completed}/${total} tasks</div>`;
+            };
+
+            // --- CALENDAR, LIST, & PIPELINE RENDERING ---
+            const renderCalendar = () => {
+                calendarBody.innerHTML = '';
+                const filteredPosts = getFilteredPosts();
+                const year = currentDate.getFullYear();
+                const month = currentDate.getMonth();
+                currentMonthYear.textContent = `${currentDate.toLocaleString('default', { month: 'long' })} ${year}`;
+                const firstDayOfMonth = new Date(year, month, 1).getDay();
+                const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+                for (let i = 0; i < firstDayOfMonth; i++) {
+                    calendarBody.innerHTML += `<div class="border-r border-b border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/20"></div>`;
+                }
+
+                for (let day = 1; day <= daysInMonth; day++) {
+                    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                    const postsForDay = filteredPosts.filter(p => p.date === dateStr);
+                    const today = new Date();
+                    const isToday = day === today.getDate() && month === today.getMonth() && year === today.getFullYear();
+                    let dayCell = document.createElement('div');
+                    dayCell.className = 'day-cell border-r border-b border-slate-200 dark:border-slate-700 p-2 flex flex-col relative';
+                    dayCell.dataset.date = dateStr;
+                    
+                    dayCell.innerHTML = `
+                        <div class="flex justify-between items-center mb-1">
+                            <time datetime="${dateStr}" class="text-sm font-semibold ${isToday ? 'bg-blue-600 text-white rounded-full w-6 h-6 flex items-center justify-center' : 'text-slate-600 dark:text-slate-400'}">${day}</time>
+                            <button class="add-post-day-btn text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 font-bold text-lg leading-none rounded-full w-6 h-6 flex items-center justify-center hover:bg-blue-100 dark:hover:bg-blue-900/20 transition-colors opacity-0 group-hover:opacity-100" style="transition: opacity 0.2s;">+</button>
+                        </div>
+                        <div class="day-events flex-grow overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+                            ${postsForDay.map(post => `
+                                <div draggable="true" class="post-item p-2 rounded-md text-xs cursor-pointer border-l-4 shadow-sm hover:shadow-md transition-shadow" data-id="${post.id}">
+                                    <div class="flex justify-between items-start">
+                                        <p class="font-semibold truncate text-slate-800 dark:text-slate-200 flex-grow">${post.title}</p>
+                                        ${getAvatarHTML(post.assignee)}
+                                    </div>
+                                    <p class="text-slate-500 dark:text-slate-400 truncate">${post.platform}</p>
+                                    ${post.campaign ? `<p class="text-indigo-500 dark:text-indigo-400 text-xs truncate mt-1">${post.campaign}</p>` : ''}
+                                    ${getChecklistProgressHTML(post.checklist)}
+                                </div>
+                            `).join('')}
+                        </div>`;
+                    
+                    dayCell.querySelector('.add-post-day-btn').addEventListener('click', (e) => { e.stopPropagation(); openModal(dateStr); });
+                    dayCell.addEventListener('mouseenter', () => dayCell.classList.add('group'));
+                    dayCell.addEventListener('mouseleave', () => dayCell.classList.remove('group'));
+                    postsForDay.forEach(post => dayCell.querySelector(`[data-id='${post.id}']`)?.classList.add(`status-${post.status}`));
+                    calendarBody.appendChild(dayCell);
+                }
+                addCalendarDragDropListeners();
+            };
+
+            const renderListView = () => {
+                listBody.innerHTML = '';
+                const filteredPosts = getFilteredPosts();
+                if (filteredPosts.length === 0) {
+                    listBody.innerHTML = `<div class="text-center p-12 text-slate-500 dark:text-slate-400">No posts match your filters.</div>`;
+                    return;
+                }
+                const groupedByDate = filteredPosts.reduce((acc, post) => {
+                    (acc[post.date] = acc[post.date] || []).push(post);
+                    return acc;
+                }, {});
+
+                for (const date in groupedByDate) {
+                    const dateObj = new Date(date + 'T00:00:00');
+                    const dateHeader = document.createElement('div');
+                    dateHeader.className = 'p-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 sticky top-0 z-10';
+                    dateHeader.innerHTML = `<h3 class="font-semibold text-slate-800 dark:text-slate-200">${dateObj.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</h3>`;
+                    listBody.appendChild(dateHeader);
+
+                    groupedByDate[date].forEach(post => {
+                        const postEl = document.createElement('div');
+                        postEl.className = 'list-item p-4 border-b border-slate-200 dark:border-slate-700 flex items-start space-x-4 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50';
+                        postEl.dataset.id = post.id;
+                        postEl.innerHTML = `
+                            ${post.imageUrl ? `<img src="${post.imageUrl}" class="w-20 h-20 object-cover rounded-md flex-shrink-0" onerror="this.style.display='none'"/>` : `<div class="w-20 h-20 rounded-md bg-slate-100 dark:bg-slate-700 flex-shrink-0 status-${post.status} border-l-4"></div>`}
+                            <div class="flex-grow">
+                                <p class="font-semibold text-slate-800 dark:text-slate-200">${post.title}</p>
+                                <p class="text-sm text-slate-500 dark:text-slate-400">${post.platform} ${post.campaign ? `&bull; <span class="text-indigo-500">${post.campaign}</span>` : ''}</p>
+                                ${post.status === 'published' ? `
+                                <div class="flex items-center space-x-4 mt-2 text-sm text-slate-500 dark:text-slate-400">
+                                    <span>❤️ ${post.likes || 0}</span>
+                                    <span>💬 ${post.comments || 0}</span>
+                                    <span>🔗 ${post.shares || 0}</span>
+                                    ${post.spend > 0 ? `<span>💰 $${post.spend}</span>` : ''}
+                                </div>
+                                ` : ''}
+                            </div>
+                             <div class="flex flex-col items-end">
+                                ${getAvatarHTML(post.assignee)}
+                                <div class="text-sm text-slate-500 capitalize mt-2">${post.status.replace('-', ' ')}</div>
+                            </div>
+                        `;
+                        postEl.addEventListener('click', () => openModal(post.date, post));
+                        listBody.appendChild(postEl);
+                    });
+                }
+            };
+
+            const renderPipelineView = () => {
+                pipelineBody.innerHTML = '';
+                const filteredPosts = getFilteredPosts();
+                pipelineStatuses.forEach(status => {
+                    const postsInStatus = filteredPosts.filter(p => p.status === status);
+                    const column = document.createElement('div');
+                    column.className = 'pipeline-column flex-shrink-0 w-1/5 bg-slate-100 dark:bg-slate-800 rounded-xl';
+                    column.dataset.status = status;
+                    column.innerHTML = `
+                        <h3 class="font-semibold p-4 border-b border-slate-200 dark:border-slate-700 capitalize text-slate-800 dark:text-slate-200">${status.replace('-', ' ')} <span class="text-sm font-normal text-slate-500">${postsInStatus.length}</span></h3>
+                        <div class="p-4 space-y-4 h-[70vh] overflow-y-auto custom-scrollbar">
+                            ${postsInStatus.map(post => `
+                                <div draggable="true" class="pipeline-card p-4 rounded-lg bg-white dark:bg-slate-900 shadow-sm cursor-pointer border-l-4 status-${post.status}" data-id="${post.id}">
+                                    <div class="flex justify-between items-start mb-2">
+                                        <p class="font-semibold text-slate-800 dark:text-slate-200 flex-grow pr-2">${post.title}</p>
+                                        ${getAvatarHTML(post.assignee)}
+                                    </div>
+                                    <p class="text-sm text-slate-500 dark:text-slate-400">${new Date(post.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} &bull; ${post.platform}</p>
+                                    ${getChecklistProgressHTML(post.checklist)}
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                    pipelineBody.appendChild(column);
+                });
+                addPipelineDragDropListeners();
+            };
+
+            // --- DRAG & DROP ---
+            const addCalendarDragDropListeners = () => {
+                document.querySelectorAll('.post-item').forEach(item => {
+                    item.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', item.dataset.id); setTimeout(() => item.classList.add('dragging'), 0); });
+                    item.addEventListener('dragend', () => item.classList.remove('dragging'));
+                });
+                document.querySelectorAll('.day-cell').forEach(cell => {
+                    cell.addEventListener('dragover', e => { e.preventDefault(); cell.classList.add('drag-over'); });
+                    cell.addEventListener('dragleave', () => cell.classList.remove('drag-over'));
+                    cell.addEventListener('drop', e => {
+                        e.preventDefault();
+                        cell.classList.remove('drag-over');
+                        const postId = e.dataTransfer.getData('text/plain');
+                        const newDate = cell.dataset.date;
+                        const postIndex = posts.findIndex(p => p.id === postId);
+                        if (postIndex > -1) {
+                            posts[postIndex].date = newDate;
+                            savePosts(); render();
+                            showToast("Post rescheduled!");
+                        }
+                    });
+                });
+            };
+            
+            const addPipelineDragDropListeners = () => {
+                document.querySelectorAll('.pipeline-card').forEach(card => {
+                    card.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', card.dataset.id); setTimeout(() => card.classList.add('dragging'), 0); });
+                    card.addEventListener('dragend', () => card.classList.remove('dragging'));
+                    card.addEventListener('click', () => { const post = posts.find(p => p.id === card.dataset.id); if (post) openModal(post.date, post); });
+                });
+                document.querySelectorAll('.pipeline-column').forEach(column => {
+                    column.addEventListener('dragover', e => { e.preventDefault(); column.classList.add('drag-over'); });
+                    column.addEventListener('dragleave', () => column.classList.remove('drag-over'));
+                    column.addEventListener('drop', e => {
+                        e.preventDefault();
+                        column.classList.remove('drag-over');
+                        const postId = e.dataTransfer.getData('text/plain');
+                        const newStatus = column.dataset.status;
+                        const postIndex = posts.findIndex(p => p.id === postId);
+                        if (postIndex > -1) {
+                            posts[postIndex].status = newStatus;
+                            savePosts(); render();
+                            showToast("Post status updated!");
+                        }
+                    });
+                });
+            };
+
+            // --- ANALYTICS RENDERING ---
+            const renderAnalytics = () => {
+                const isDark = document.documentElement.classList.contains('dark');
+                const textColor = isDark ? '#cbd5e1' : '#475569';
+                Chart.defaults.color = textColor;
+                
+                const postsThisMonth = posts.filter(p => new Date(p.date).getMonth() === currentDate.getMonth() && new Date(p.date).getFullYear() === currentDate.getFullYear());
+                document.getElementById('total-posts').textContent = postsThisMonth.length;
+                const platformData = postsThisMonth.reduce((acc, post) => { acc[post.platform] = (acc[post.platform] || 0) + 1; return acc; }, {});
+                const statusData = postsThisMonth.reduce((acc, post) => { acc[post.status] = (acc[post.status] || 0) + 1; return acc; }, {});
+                
+                if(platformChart) platformChart.destroy();
+                platformChart = new Chart(document.getElementById('platform-chart').getContext('2d'), { type: 'doughnut', data: { labels: Object.keys(platformData), datasets: [{ data: Object.values(platformData), backgroundColor: ['#3b82f6', '#14b8a6', '#ef4444', '#8b5cf6', '#f97316', '#64748b'], borderColor: isDark ? '#1e293b' : '#ffffff', borderWidth: 3 }] }, options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, padding: 15, color: textColor } } } } });
+                
+                if(statusChart) statusChart.destroy();
+                statusChart = new Chart(document.getElementById('status-chart').getContext('2d'), { type: 'pie', data: { labels: Object.keys(statusData).map(s => s.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())), datasets: [{ data: Object.values(statusData), backgroundColor: ['#a78bfa', '#f97316', '#3b82f6', '#22c55e', '#6b7280'], borderColor: isDark ? '#1e293b' : '#ffffff', borderWidth: 3 }] }, options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, padding: 15, color: textColor } } } } });
+
+                const campaignPerformance = postsThisMonth.reduce((acc, post) => {
+                    const campaignName = post.campaign || 'Uncategorized';
+                    if (!acc[campaignName]) { acc[campaignName] = { likes: 0, comments: 0, shares: 0, spend: 0 }; }
+                    acc[campaignName].likes += Number(post.likes) || 0;
+                    acc[campaignName].comments += Number(post.comments) || 0;
+                    acc[campaignName].shares += Number(post.shares) || 0;
+                    acc[campaignName].spend += Number(post.spend) || 0;
+                    return acc;
+                }, {});
+
+                if(campaignChart) campaignChart.destroy();
+                campaignChart = new Chart(document.getElementById('campaign-chart').getContext('2d'), { type: 'bar', data: { labels: Object.keys(campaignPerformance), datasets: [ { label: 'Likes', data: Object.values(campaignPerformance).map(c => c.likes), backgroundColor: '#3b82f6' }, { label: 'Comments', data: Object.values(campaignPerformance).map(c => c.comments), backgroundColor: '#14b8a6' }, { label: 'Shares', data: Object.values(campaignPerformance).map(c => c.shares), backgroundColor: '#8b5cf6' }, { label: 'Spend ($)', data: Object.values(campaignPerformance).map(c => c.spend), backgroundColor: '#f97316', yAxisID: 'y1' } ] }, options: { responsive: true, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, type: 'linear', position: 'left' }, y1: { type: 'linear', position: 'right', beginAtZero: true, grid: { drawOnChartArea: false } } }, plugins: { legend: { position: 'bottom' } } } });
+                
+                const objectivePerformance = postsThisMonth.reduce((acc, post) => {
+                    const objectiveName = post.objective || 'N/A';
+                    if (!acc[objectiveName]) { acc[objectiveName] = { engagement: 0 }; }
+                    acc[objectiveName].engagement += (Number(post.likes) || 0) + (Number(post.comments) || 0) + (Number(post.shares) || 0);
+                    return acc;
+                }, {});
+
+                if(objectiveChart) objectiveChart.destroy();
+                objectiveChart = new Chart(document.getElementById('objective-chart').getContext('2d'), { type: 'bar', data: { labels: Object.keys(objectivePerformance), datasets: [{ label: 'Total Engagement', data: Object.values(objectivePerformance).map(o => o.engagement), backgroundColor: ['#3b82f6', '#14b8a6', '#ef4444', '#8b5cf6', '#f97316'] }] }, options: { responsive: true, indexAxis: 'y', plugins: { legend: { display: false } } } });
+                
+                // Top Performing Content
+                const topPosts = postsThisMonth
+                    .filter(p => p.status === 'published')
+                    .map(p => ({ ...p, engagement: (Number(p.likes) || 0) + (Number(p.comments) || 0) + (Number(p.shares) || 0) }))
+                    .sort((a, b) => b.engagement - a.engagement)
+                    .slice(0, 3);
+                
+                topPerformingContentContainer.innerHTML = topPosts.length > 0 ? topPosts.map(post => `
+                    <div class="flex items-center justify-between p-3 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+                        <div>
+                            <p class="font-semibold text-slate-800 dark:text-slate-200">${post.title}</p>
+                            <p class="text-sm text-slate-500">${post.platform}</p>
+                        </div>
+                        <div class="text-right">
+                             <p class="font-bold text-lg text-blue-600">${post.engagement}</p>
+                             <p class="text-xs text-slate-500">Total Engagement</p>
+                        </div>
+                    </div>
+                `).join('') : '<p class="text-slate-500 text-center">No published posts with performance data this month.</p>';
+
+            };
+
+            // --- EXPORT & IDEA GENERATOR ---
+            const exportToCSV = () => {
+                const headers = ['id', 'date', 'title', 'description', 'hashtags', 'imageUrl', 'platform', 'status', 'objective', 'campaign', 'assignee', 'budget', 'spend', 'likes', 'comments', 'shares', ...Object.keys(checklistItems)];
+                const rows = posts.map(post => headers.map(header => {
+                    if (checklistItems[header]) {
+                        return `"${post.checklist && post.checklist[header] ? 'true' : 'false'}"`;
+                    }
+                    return `"${(post[header] || '').toString().replace(/"/g, '""')}"`
+                }).join(','));
+                const csvContent = "data:text/csv;charset=utf-8," + [headers.join(',')].concat(rows).join('\r\n');
+                const link = document.createElement("a"); link.setAttribute("href", encodeURI(csvContent)); link.setAttribute("download", "knowsta_studio_export.csv"); document.body.appendChild(link); link.click(); document.body.removeChild(link);
+                showToast("Data exported to CSV!");
+            };
+
+            const generateIdea = () => {
+                const templates = ["A 'How-To' guide on {topic}", "Share a behind-the-scenes look at {activity}", "Post a poll: {optionA} vs. {optionB}?", "Ask your audience about their favorite {topic}", "Share a surprising fact about {topic}", "Feature a team member and their role in {activity}"];
+                const topics = ["social media marketing", "content creation", "graphic design", "email campaigns", "SEO strategy", "productivity hacks"];
+                const activities = ["our new project", "a typical workday", "our brainstorming process", "product development", "customer support"];
+                const options = [["coffee", "tea"], ["cats", "dogs"], ["remote work", "office"], ["summer", "winter"]];
+                const randomItem = arr => arr[Math.floor(Math.random() * arr.length)];
+                let idea = randomItem(templates); idea = idea.replace('{topic}', randomItem(topics)).replace('{activity}', randomItem(activities)); if (idea.includes('{optionA}')) { const pollOptions = randomItem(options); idea = idea.replace('{optionA}', pollOptions[0]).replace('{optionB}', pollOptions[1]); }
+                ideaText.textContent = idea;
+            };
+
+            // --- EVENT LISTENERS ---
+            prevMonthBtn.addEventListener('click', () => { currentDate.setMonth(currentDate.getMonth() - 1); render(); });
+            nextMonthBtn.addEventListener('click', () => { currentDate.setMonth(currentDate.getMonth() + 1); render(); });
+            todayBtn.addEventListener('click', () => { currentDate = new Date(); render(); });
+            addPostBtnHeader.addEventListener('click', () => { const today = new Date(); const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`; openModal(dateStr); });
+            closeModalBtn.addEventListener('click', closeModal);
+            modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+            exportCsvBtn.addEventListener('click', exportToCSV);
+            generateIdeaBtn.addEventListener('click', generateIdea);
+            darkModeToggle.addEventListener('click', () => { const newTheme = document.documentElement.classList.contains('dark') ? 'light' : 'dark'; applyTheme(newTheme); });
+            viewCalendarBtn.addEventListener('click', () => switchView('calendar'));
+            viewListBtn.addEventListener('click', () => switchView('list'));
+            viewPipelineBtn.addEventListener('click', () => switchView('pipeline'));
+            searchInput.addEventListener('input', e => { searchTerm = e.target.value; render(); });
+            statusFilterSelect.addEventListener('change', e => { statusFilter = e.target.value; render(); });
+            campaignFilterSelect.addEventListener('change', e => { campaignFilter = e.target.value; render(); });
+            assigneeFilterSelect.addEventListener('change', e => { assigneeFilter = e.target.value; render(); });
+            imageUrlInput.addEventListener('keyup', handleImagePreview);
+            postStatusSelect.addEventListener('change', togglePerformanceMetrics);
+
+            postForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const id = document.getElementById('post-id').value;
+                const checklistData = {};
+                checklistContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+                    checklistData[cb.dataset.key] = cb.checked;
+                });
+                const postData = { id: id || Date.now().toString(), title: document.getElementById('post-title').value, description: document.getElementById('post-description').value, hashtags: document.getElementById('post-hashtags').value, imageUrl: imageUrlInput.value, date: document.getElementById('post-date').value, platform: document.getElementById('post-platform').value, status: postStatusSelect.value, objective: document.getElementById('post-objective').value, campaign: document.getElementById('post-campaign').value, assignee: document.getElementById('post-assignee').value, budget: document.getElementById('post-budget').value || 0, spend: document.getElementById('post-spend').value || 0, likes: document.getElementById('post-likes').value || 0, comments: document.getElementById('post-comments').value || 0, shares: document.getElementById('post-shares').value || 0, checklist: checklistData };
+                if (id) { posts = posts.map(p => p.id === id ? postData : p); showToast("Post updated successfully!"); } 
+                else { posts.push(postData); showToast("New post created!"); }
+                savePosts(); render(); closeModal();
+            });
+
+            deletePostBtn.addEventListener('click', () => {
+                const id = document.getElementById('post-id').value;
+                if(confirm('Are you sure you want to delete this post? This action cannot be undone.')) {
+                    posts = posts.filter(p => p.id !== id);
+                    savePosts(); render(); closeModal();
+                    showToast("Post deleted.");
+                }
+            });
+            
+            duplicatePostBtn.addEventListener('click', () => {
+                const checklistData = {};
+                checklistContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+                    checklistData[cb.dataset.key] = cb.checked;
+                });
+                const newPost = { id: Date.now().toString(), title: document.getElementById('post-title').value + " (Copy)", description: document.getElementById('post-description').value, hashtags: document.getElementById('post-hashtags').value, imageUrl: imageUrlInput.value, date: document.getElementById('post-date').value, platform: document.getElementById('post-platform').value, status: 'idea', objective: document.getElementById('post-objective').value, campaign: document.getElementById('post-campaign').value, assignee: document.getElementById('post-assignee').value, budget: document.getElementById('post-budget').value, spend: 0, likes: 0, comments: 0, shares: 0, checklist: checklistData };
+                posts.push(newPost);
+                savePosts(); render(); closeModal();
+                showToast("Post duplicated successfully!");
+            });
+
+            calendarBody.addEventListener('click', e => { const postItem = e.target.closest('.post-item'); if (postItem) { const post = posts.find(p => p.id === postItem.dataset.id); if (post) openModal(post.date, post); } });
+            
+            // --- INITIALIZATION ---
+            // Migrate old statuses to new pipeline statuses
+            posts.forEach(p => {
+                if (p.status === 'planned') p.status = 'scheduled';
+                if (p.status === 'in-progress') p.status = 'drafting';
+                if (p.status === 'archived') p.status = 'reviewing';
+            });
+
+            const savedTheme = localStorage.getItem('theme') || 'light';
+            applyTheme(savedTheme);
+            switchView('calendar');
+        });
+    </script>
+</body>
+</html>
+
